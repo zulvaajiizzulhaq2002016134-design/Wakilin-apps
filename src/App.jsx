@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 
 // GANTI NOMOR INI DENGAN NOMOR WA ANDA (Gunakan awalan 62)
-const APP_PHONE_NUMBER = "628xxxxxxxxxx"; 
+const APP_PHONE_NUMBER = "6289520290203"; 
 
 export default function App() {
   const [service, setService] = useState('antar_jemput');
