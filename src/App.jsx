@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   ShoppingBag, Car, FileText, BookOpen, Send, Navigation, 
-  AlertTriangle, Compass, ShieldCheck, Sparkles, MapPin, Search
+  AlertTriangle, Compass, ShieldCheck, Sparkles, MapPin, Search, Calculator
 } from 'lucide-react';
 
-// GANTI NOMOR INI DENGAN NOMOR WA ANDA (Gunakan awalan 62)
-const APP_PHONE_NUMBER = "6289520290203"; 
+// GANTI NOMOR INI DENGAN NOMOR WA ANDA (Format: 628xxx)
+const APP_PHONE_NUMBER = "6285601733814"; 
 
 export default function App() {
   const [service, setService] = useState('antar_jemput');
@@ -13,8 +13,6 @@ export default function App() {
   // Coords State
   const [pickupCoords, setPickupCoords] = useState(null);
   const [destCoords, setDestCoords] = useState(null);
-  const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsStatus, setGpsStatus] = useState('');
 
   // Autocomplete Suggestions State
   const [pickupSuggestions, setPickupSuggestions] = useState([]);
@@ -40,19 +38,19 @@ export default function App() {
     deliveryAddress: '',
     eduLevel: 'SMA/SMK',
     subject: '',
-    taskType: '',
-    deadline: '',
     taskNotes: ''
   });
 
   const [estimatedKm, setEstimatedKm] = useState(null);
   const [estimatedPrice, setEstimatedPrice] = useState(null);
+  const [isCalculated, setIsCalculated] = useState(false);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setIsCalculated(false); // Reset hitungan jika form berubah
   };
 
-  // Autocomplete Geocoding via OpenStreetMap
+  // Autocomplete Geocoding via OpenStreetMap (Nominatim API)
   const fetchAddressSuggestions = async (query, type) => {
     if (!query || query.length < 3) {
       if (type === 'pickup') setPickupSuggestions([]);
@@ -74,19 +72,23 @@ export default function App() {
         setShowDestList(true);
       }
     } catch (err) {
-      console.error("Gagal mengambil daftar lokasi:", err);
+      console.error("Gagal mengambil lokasi:", err);
     }
   };
 
   const handlePickupChange = (e) => {
     const val = e.target.value;
     setFormData(prev => ({ ...prev, pickupAddress: val }));
+    setPickupCoords(null);
+    setIsCalculated(false);
     fetchAddressSuggestions(val, 'pickup');
   };
 
   const handleDestChange = (e) => {
     const val = e.target.value;
     setFormData(prev => ({ ...prev, destAddress: val }));
+    setDestCoords(null);
+    setIsCalculated(false);
     fetchAddressSuggestions(val, 'dest');
   };
 
@@ -98,24 +100,20 @@ export default function App() {
     if (type === 'pickup') {
       setPickupCoords({ lat, lng });
       setFormData(prev => ({ ...prev, pickupAddress: placeName }));
-      setPickupSuggestions([]);
       setShowPickupList(false);
     } else if (type === 'dest') {
       setDestCoords({ lat, lng });
       setFormData(prev => ({ ...prev, destAddress: placeName }));
-      setDestSuggestions([]);
       setShowDestList(false);
     }
   };
 
-  // Geolocation Browser (Lokasi Saat Ini)
+  // GPS Lokasi HP
   const getGpsLocation = (type) => {
     if (!navigator.geolocation) {
-      alert("Browser/HP Anda tidak mendukung lokasi otomatis.");
+      alert("Browser/HP Anda tidak mendukung fitur lokasi GPS.");
       return;
     }
-    setGpsLoading(true);
-    setGpsStatus('📍 Mengunci titik GPS presisi...');
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -124,80 +122,105 @@ export default function App() {
         
         if (type === 'pickup') {
           setPickupCoords({ lat, lng });
-          setFormData(prev => ({ ...prev, pickupAddress: `[Lokasi GPS Presisi]: ${lat}, ${lng}` }));
+          setFormData(prev => ({ ...prev, pickupAddress: `[Titik GPS Saya]: ${lat.toFixed(5)}, ${lng.toFixed(5)}` }));
         } else if (type === 'dest') {
           setDestCoords({ lat, lng });
-          setFormData(prev => ({ ...prev, destAddress: `[Lokasi GPS Presisi]: ${lat}, ${lng}` }));
+          setFormData(prev => ({ ...prev, destAddress: `[Titik GPS Tujuan]: ${lat.toFixed(5)}, ${lng.toFixed(5)}` }));
         }
-
-        setGpsLoading(false);
-        setGpsStatus('✅ Titik GPS berhasil terkunci!');
+        setIsCalculated(false);
       },
-      () => {
-        setGpsLoading(false);
-        setGpsStatus('❌ Gagal mengambil GPS. Pastikan izin lokasi HP aktif.');
+      (err) => {
+        alert("Gagal mengambil lokasi GPS. Pastikan Izin Akses Lokasi/GPS di HP Anda sudah aktif.");
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true }
     );
   };
 
-  // LOGIKA BARU: Hitung Jarak & Tarif (Per 5 KM = Rp8.000)
-  useEffect(() => {
-    if (pickupCoords && destCoords && service === 'antar_jemput') {
-      const R = 6371; // Jari-jari bumi dalam KM
-      const dLat = (destCoords.lat - pickupCoords.lat) * Math.PI / 180;
-      const dLon = (destCoords.lng - pickupCoords.lng) * Math.PI / 180;
-      const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(pickupCoords.lat * Math.PI / 180) * Math.cos(destCoords.lat * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      
-      // Estimasi jarak rute jalan raya (+30% dari garis lurus)
-      const distance = R * c * 1.3;
-      const roundedKm = parseFloat(distance.toFixed(1));
-      setEstimatedKm(roundedKm);
-
-      // RUMUS ONGKIR PER 5 KM = RP 8.000
-      // 0.1 - 5.0 KM = Rp 8.000
-      // 5.1 - 10.0 KM = Rp 16.000
-      // 10.1 - 15.0 KM = Rp 24.000, dst.
-      const kelipatan5Km = Math.ceil(roundedKm / 5);
-      const totalHarga = kelipatan5Km * 8000;
-      
-      setEstimatedPrice(totalHarga);
+  // FUNGSI PROSES CEK TARIF (LOGIKA BARU SILUMAN/SISTEM)
+  const handleCekTarif = async () => {
+    if (!formData.pickupAddress || !formData.destAddress) {
+      alert("Harap isi alamat penjemputan dan tujuan terlebih dahulu!");
+      return;
     }
-  }, [pickupCoords, destCoords, service]);
+
+    let pLat = pickupCoords?.lat;
+    let pLng = pickupCoords?.lng;
+    let dLat = destCoords?.lat;
+    let dLng = destCoords?.lng;
+
+    // Jika user mengetik manual tanpa pilih suggestion, cari koordinat otomatis
+    try {
+      if (!pLat) {
+        const resP = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.pickupAddress)}&countrycodes=id&limit=1`);
+        const dataP = await resP.json();
+        if (dataP.length > 0) {
+          pLat = parseFloat(dataP[0].lat);
+          pLng = parseFloat(dataP[0].lon);
+          setPickupCoords({ lat: pLat, lng: pLng });
+        }
+      }
+
+      if (!dLat) {
+        const resD = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.destAddress)}&countrycodes=id&limit=1`);
+        const dataD = await resD.json();
+        if (dataD.length > 0) {
+          dLat = parseFloat(dataD[0].lat);
+          dLng = parseFloat(dataD[0].lon);
+          setDestCoords({ lat: dLat, lng: dLng });
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (!pLat || !dLat) {
+      alert("Lokasi tidak ditemukan pada peta. Silakan pilih lokasi dari rekomendasi yang muncul.");
+      return;
+    }
+
+    // Hitung Jarak Haversine
+    const R = 6371; 
+    const dLatRad = (dLat - pLat) * Math.PI / 180;
+    const dLonRad = (dLng - pLng) * Math.PI / 180;
+    const a = 
+      Math.sin(dLatRad/2) * Math.sin(dLatRad/2) +
+      Math.cos(pLat * Math.PI / 180) * Math.cos(dLat * Math.PI / 180) * 
+      Math.sin(dLonRad/2) * Math.sin(dLonRad/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    
+    // Estimasi Jarak Rute Darat (+30% penyesuaian rute)
+    const distance = R * c * 1.3;
+    const roundedKm = parseFloat(distance.toFixed(1));
+
+    // LOGIKA TARIF BARU
+    let totalHarga = 0;
+    if (roundedKm <= 1) {
+      totalHarga = 2000; // Minimal 1 KM = Rp 2.000
+    } else {
+      // Lebih dari 1 KM hingga 5 KM = Rp 8.000
+      // Jika lebih dari 5 KM, dihitung kelipatan 5 KM
+      const kelipatan = Math.ceil(roundedKm / 5);
+      totalHarga = kelipatan * 8000;
+    }
+
+    setEstimatedKm(roundedKm);
+    setEstimatedPrice(totalHarga);
+    setIsCalculated(true);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    let message = "";
     const mapsBase = "https://www.google.com/maps?q=";
+    let message = "";
 
-    if (service === 'urgent') {
-      const pickupMaps = pickupCoords ? `${mapsBase}${pickupCoords.lat},${pickupCoords.lng}` : 'Alamat Manual';
-      message = `🚨 *ORDER URGENT / EMERGENCY - WAKILIN* 🚨\n\n` +
-        `👤 *Nama:* ${formData.name}\n` +
-        `📞 *No. WA:* ${formData.phone}\n` +
-        `⚡ *Urgensi:* ${formData.urgentLevel}\n\n` +
-        `📍 *Lokasi Penanganan:* ${formData.pickupAddress}\n` +
-        `🔗 *Link Maps:* ${pickupMaps}\n\n` +
-        `📝 *Kebutuhan Mendadak:*\n${formData.urgentNotes}\n\n` +
-        `_MOHON PROSES SECEPATNYA!_`;
-    } 
-    else if (service === 'wisata') {
-      message = `🧳 *ORDER TRIP WISATA - WAKILIN* 🚗\n\n` +
-        `👤 *Nama:* ${formData.name}\n` +
-        `📞 *No. WA:* ${formData.phone}\n` +
-        `⏳ *Durasi:* ${formData.tourDuration}\n` +
-        `👥 *Rombongan:* ${formData.passengers}\n` +
-        `📅 *Waktu:* ${formData.datetime}\n\n` +
-        `🗺️ *Rencana Destinasi:*\n${formData.destinations}\n\n` +
-        `🏡 *Lokasi Jemput:* ${formData.pickupAddress}`;
-    }
-    else if (service === 'antar_jemput') {
-      const pickupMaps = pickupCoords ? `${mapsBase}${pickupCoords.lat},${pickupCoords.lng}` : `Alamat: ${formData.pickupAddress}`;
-      const destMaps = destCoords ? `${mapsBase}${destCoords.lat},${destCoords.lng}` : `Alamat: ${formData.destAddress}`;
+    if (service === 'antar_jemput') {
+      if (!isCalculated) {
+        alert("Silakan klik tombol 'Cek Tarif & Estimasi Ongkir' terlebih dahulu sebelum mengirim!");
+        return;
+      }
+
+      const pickupMaps = pickupCoords ? `${mapsBase}${pickupCoords.lat},${pickupCoords.lng}` : formData.pickupAddress;
+      const destMaps = destCoords ? `${mapsBase}${destCoords.lat},${destCoords.lng}` : formData.destAddress;
 
       message = `🛵 *ORDER ANTAR - JEMPUT - WAKILIN*\n\n` +
         `👤 *Nama Pemesan:* ${formData.name}\n` +
@@ -207,31 +230,21 @@ export default function App() {
         `🔗 *Maps Jemput:* ${pickupMaps}\n\n` +
         `🏁 *LOKASI TUJUAN:* ${formData.destAddress}\n` +
         `🔗 *Maps Tujuan:* ${destMaps}\n\n` +
-        `📏 *Estimasi Jarak:* ${estimatedKm ? `${estimatedKm} KM` : 'Cek Manual'}\n` +
-        `💰 *Estimasi Ongkir:* ${estimatedPrice ? `Rp ${estimatedPrice.toLocaleString('id-ID')}` : 'Akan dihitung admin'}\n\n` +
-        `_Mohon konfirmasi pesanan ini._`;
+        `📏 *Estimasi Jarak:* ${estimatedKm} KM\n` +
+        `💰 *Estimasi Ongkir:* Rp ${estimatedPrice?.toLocaleString('id-ID')}\n\n` +
+        `_Mohon diproses, terima kasih!_`;
     } 
+    else if (service === 'urgent') {
+      message = `🚨 *ORDER URGENT / EMERGENCY*\n\nNama: ${formData.name}\nNo. WA: ${formData.phone}\nUrgensi: ${formData.urgentLevel}\nLokasi: ${formData.pickupAddress}\nCatatan: ${formData.urgentNotes}`;
+    }
     else if (service === 'jastip') {
-      message = `🛒 *ORDER JASTIP BELANJA - WAKILIN*\n\n` +
-        `👤 *Nama:* ${formData.name}\n` +
-        `📞 *No. WA:* ${formData.phone}\n\n` +
-        `🛍️ *Barang Dibeli:*\n${formData.itemDetails}\n\n` +
-        `💵 *Budget:* Rp ${formData.budget}\n` +
-        `🏪 *Lokasi Toko:* ${formData.storeLocation}\n\n` +
-        `🏡 *Alamat Pengantaran:* ${formData.deliveryAddress}`;
-    } 
-    else if (service === 'tugas' || service === 'les') {
-      const labelType = service === 'tugas' ? 'BANTUAN TUGAS' : 'LES PRIVAT';
-      message = `📚 *ORDER ${labelType} - WAKILIN*\n\n` +
-        `👤 *Nama:* ${formData.name}\n` +
-        `📞 *No. WA:* ${formData.phone}\n` +
-        `🎓 *Pendidikan:* ${formData.eduLevel}\n` +
-        `📖 *Mapel/Kuliah:* ${formData.subject}\n\n` +
-        `📌 *Instruksi Detail:*\n${formData.taskNotes}`;
+      message = `🛒 *ORDER JASTIP*\n\nNama: ${formData.name}\nNo. WA: ${formData.phone}\nBarang: ${formData.itemDetails}\nBudget: Rp ${formData.budget}\nToko: ${formData.storeLocation}\nAlamat Antar: ${formData.deliveryAddress}`;
+    }
+    else {
+      message = `📚 *ORDER LAYANAN - WAKILIN*\n\nNama: ${formData.name}\nNo. WA: ${formData.phone}\nDetail: ${formData.taskNotes || formData.destinations}`;
     }
 
-    const encodedMessage = encodeURIComponent(message);
-    window.open(`https://wa.me/${APP_PHONE_NUMBER}?text=${encodedMessage}`, '_blank');
+    window.open(`https://wa.me/${APP_PHONE_NUMBER}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   return (
@@ -259,27 +272,24 @@ export default function App() {
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Hero */}
       <section className="max-w-2xl mx-auto px-4 pt-6 pb-4 text-center">
         <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-400/20 text-blue-300 text-xs px-3 py-1 rounded-full mb-3">
-          <ShieldCheck className="w-4 h-4 text-blue-400" /> Tarif Rp 8.000 / 5 KM
+          <ShieldCheck className="w-4 h-4 text-blue-400" /> Pengiriman & Kurir Terpercaya
         </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight">
           Pesan Layanan <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300">Wakilin</span>
         </h2>
       </section>
 
-      {/* Grid Kartu Layanan */}
+      {/* Grid Layanan */}
       <main className="max-w-2xl mx-auto px-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-6">
-          
           <button
             type="button"
-            onClick={() => setService('antar_jemput')}
+            onClick={() => { setService('antar_jemput'); setIsCalculated(false); }}
             className={`p-3.5 rounded-2xl border text-left transition-all ${
-              service === 'antar_jemput'
-                ? 'bg-blue-900/40 border-blue-400 text-white shadow-lg'
-                : 'bg-slate-800/60 border-slate-700 text-slate-300'
+              service === 'antar_jemput' ? 'bg-blue-900/40 border-blue-400 text-white shadow-lg' : 'bg-slate-800/60 border-slate-700 text-slate-300'
             }`}
           >
             <div className={`p-2 rounded-xl w-fit ${service === 'antar_jemput' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-blue-400'}`}>
@@ -295,9 +305,7 @@ export default function App() {
             type="button"
             onClick={() => setService('urgent')}
             className={`p-3.5 rounded-2xl border text-left transition-all ${
-              service === 'urgent'
-                ? 'bg-red-900/40 border-red-500 text-white shadow-lg'
-                : 'bg-slate-800/60 border-slate-700 text-slate-300'
+              service === 'urgent' ? 'bg-red-900/40 border-red-500 text-white shadow-lg' : 'bg-slate-800/60 border-slate-700 text-slate-300'
             }`}
           >
             <div className={`p-2 rounded-xl w-fit ${service === 'urgent' ? 'bg-red-500 text-white' : 'bg-slate-700 text-red-400'}`}>
@@ -311,29 +319,9 @@ export default function App() {
 
           <button
             type="button"
-            onClick={() => setService('wisata')}
-            className={`p-3.5 rounded-2xl border text-left transition-all ${
-              service === 'wisata'
-                ? 'bg-cyan-900/40 border-cyan-400 text-white shadow-lg'
-                : 'bg-slate-800/60 border-slate-700 text-slate-300'
-            }`}
-          >
-            <div className={`p-2 rounded-xl w-fit ${service === 'wisata' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-cyan-400'}`}>
-              <Compass className="w-5 h-5" />
-            </div>
-            <div className="mt-3">
-              <h4 className="text-xs font-extrabold">Trip Wisata</h4>
-              <p className="text-[10px] text-slate-400 mt-0.5">City tour</p>
-            </div>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setService('jastip')}
             className={`p-3.5 rounded-2xl border text-left transition-all ${
-              service === 'jastip'
-                ? 'bg-emerald-900/40 border-emerald-400 text-white shadow-lg'
-                : 'bg-slate-800/60 border-slate-700 text-slate-300'
+              service === 'jastip' ? 'bg-emerald-900/40 border-emerald-400 text-white shadow-lg' : 'bg-slate-800/60 border-slate-700 text-slate-300'
             }`}
           >
             <div className={`p-2 rounded-xl w-fit ${service === 'jastip' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-emerald-400'}`}>
@@ -344,50 +332,13 @@ export default function App() {
               <p className="text-[10px] text-slate-400 mt-0.5">Makanan & toko</p>
             </div>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setService('tugas')}
-            className={`p-3.5 rounded-2xl border text-left transition-all ${
-              service === 'tugas'
-                ? 'bg-purple-900/40 border-purple-400 text-white shadow-lg'
-                : 'bg-slate-800/60 border-slate-700 text-slate-300'
-            }`}
-          >
-            <div className={`p-2 rounded-xl w-fit ${service === 'tugas' ? 'bg-purple-500 text-white' : 'bg-slate-700 text-purple-400'}`}>
-              <FileText className="w-5 h-5" />
-            </div>
-            <div className="mt-3">
-              <h4 className="text-xs font-extrabold">Bantuan Tugas</h4>
-              <p className="text-[10px] text-slate-400 mt-0.5">Sekolah & kampus</p>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setService('les')}
-            className={`p-3.5 rounded-2xl border text-left transition-all ${
-              service === 'les'
-                ? 'bg-amber-900/40 border-amber-400 text-white shadow-lg'
-                : 'bg-slate-800/60 border-slate-700 text-slate-300'
-            }`}
-          >
-            <div className={`p-2 rounded-xl w-fit ${service === 'les' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-amber-400'}`}>
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div className="mt-3">
-              <h4 className="text-xs font-extrabold">Les Privat</h4>
-              <p className="text-[10px] text-slate-400 mt-0.5">Bimbel pribadi</p>
-            </div>
-          </button>
-
         </div>
 
-        {/* Form Area */}
+        {/* Form Container */}
         <div className="bg-slate-800/90 rounded-3xl border border-slate-700 p-5 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-4">
 
-            {/* Identitas Pemesan */}
+            {/* Identitas */}
             <div className="border-b border-slate-700 pb-4">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">1. Identitas Pemesan</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -421,9 +372,9 @@ export default function App() {
             {/* FORM ANTAR JEMPUT */}
             {service === 'antar_jemput' && (
               <div className="space-y-3.5">
-                <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider">2. Rincian Lokasi Presisi</h3>
+                <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider">2. Lokasi Penjemputan & Tujuan</h3>
 
-                {/* INPUT PENJEMPUTAN */}
+                {/* PENJEMPUTAN */}
                 <div className="relative">
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
@@ -440,13 +391,12 @@ export default function App() {
                   <input
                     type="text"
                     required
-                    placeholder="Ketik tempat (Contoh: Ngaliyan / Mall Paragon)..."
+                    placeholder="Ketik lokasi jemput (misal: Ngaliyan, Semarang)..."
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500"
                     value={formData.pickupAddress}
                     onChange={handlePickupChange}
                   />
 
-                  {/* Suggestions List */}
                   {showPickupList && pickupSuggestions.length > 0 && (
                     <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-48 overflow-y-auto">
                       {pickupSuggestions.map((item, idx) => (
@@ -461,12 +411,9 @@ export default function App() {
                       ))}
                     </div>
                   )}
-                  {pickupCoords && (
-                    <span className="text-[10px] text-emerald-400 mt-0.5 inline-block">✓ GPS Presisi Terkunci</span>
-                  )}
                 </div>
 
-                {/* INPUT TUJUAN */}
+                {/* TUJUAN */}
                 <div className="relative">
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
@@ -483,13 +430,12 @@ export default function App() {
                   <input
                     type="text"
                     required
-                    placeholder="Ketik tujuan (Contoh: UIN Walisongo / Simpang Lima)..."
+                    placeholder="Ketik lokasi tujuan (misal: UIN Walisongo)..."
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500"
                     value={formData.destAddress}
                     onChange={handleDestChange}
                   />
 
-                  {/* Suggestions List */}
                   {showDestList && destSuggestions.length > 0 && (
                     <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-48 overflow-y-auto">
                       {destSuggestions.map((item, idx) => (
@@ -503,9 +449,6 @@ export default function App() {
                         </div>
                       ))}
                     </div>
-                  )}
-                  {destCoords && (
-                    <span className="text-[10px] text-emerald-400 mt-0.5 inline-block">✓ GPS Presisi Terkunci</span>
                   )}
                 </div>
 
@@ -522,22 +465,26 @@ export default function App() {
                   />
                 </div>
 
-                {/* BOX ESTIMASI JARAK & HARGA BARU */}
-                {(estimatedPrice || gpsStatus) && (
-                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs space-y-1.5 mt-2">
-                    {gpsStatus && <p className="text-blue-400 font-semibold">{gpsStatus}</p>}
-                    {estimatedKm && (
-                      <div className="flex justify-between text-slate-400">
-                        <span>Estimasi Jarak Rute:</span>
-                        <span className="font-bold text-white">{estimatedKm} KM</span>
-                      </div>
-                    )}
-                    {estimatedPrice && (
-                      <div className="flex justify-between text-sm font-extrabold text-emerald-400 pt-1.5 border-t border-slate-800">
-                        <span>Estimasi Tarif (Per 5 KM):</span>
-                        <span>Rp {estimatedPrice.toLocaleString('id-ID')}</span>
-                      </div>
-                    )}
+                {/* TOMBOL CEK TARIF */}
+                <button
+                  type="button"
+                  onClick={handleCekTarif}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all mt-3"
+                >
+                  <Calculator className="w-4 h-4" /> Cek Tarif & Estimasi Ongkir
+                </button>
+
+                {/* HASIL ESTIMASI */}
+                {isCalculated && (
+                  <div className="bg-slate-900 border border-emerald-500/50 rounded-xl p-3 text-xs space-y-1.5 mt-2">
+                    <div className="flex justify-between text-slate-300">
+                      <span>Estimasi Jarak:</span>
+                      <span className="font-bold text-white">{estimatedKm} KM</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-extrabold text-emerald-400 pt-1.5 border-t border-slate-800">
+                      <span>Estimasi Ongkir:</span>
+                      <span>Rp {estimatedPrice?.toLocaleString('id-ID')}</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -545,219 +492,34 @@ export default function App() {
 
             {/* FORM URGENT */}
             {service === 'urgent' && (
-              <div className="space-y-3.5">
-                <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider">2. Detail Layanan Darurat</h3>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Tingkat Urgensi</label>
-                  <select
-                    name="urgentLevel"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                    value={formData.urgentLevel}
-                    onChange={handleChange}
-                  >
-                    <option value="SANGAT MENDESAK (Sekarang Juga)">SANGAT MENDESAK (Sekarang Juga)</option>
-                    <option value="Mendesak (Dalam 1 Jam)">Mendesak (Dalam 1 Jam)</option>
-                    <option value="Hari Ini (Bisa Ditunggu)">Hari Ini (Bisa Ditunggu)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Lokasi Penanganan / Penjemputan</label>
-                  <input
-                    type="text"
-                    name="pickupAddress"
-                    required
-                    placeholder="Alamat atau lokasi penjemputan..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                    value={formData.pickupAddress}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Kebutuhan / Barang</label>
-                  <textarea
-                    name="urgentNotes"
-                    rows="2"
-                    required
-                    placeholder="Contoh: Ambilkan kunci rumah yang tertinggal..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                    value={formData.urgentNotes}
-                    onChange={handleChange}
-                  ></textarea>
-                </div>
+              <div className="space-y-3">
+                <label className="block text-xs font-semibold text-slate-300">Detail Layanan Urgent</label>
+                <textarea
+                  name="urgentNotes"
+                  rows="2"
+                  placeholder="Jelaskan kebutuhan Anda..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
+                  value={formData.urgentNotes}
+                  onChange={handleChange}
+                ></textarea>
               </div>
             )}
 
-            {/* FORM WISATA */}
-            {service === 'wisata' && (
-              <div className="space-y-3.5">
-                <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider">2. Rencana Trip Wisata</h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Durasi Tour</label>
-                    <select
-                      name="tourDuration"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                      value={formData.tourDuration}
-                      onChange={handleChange}
-                    >
-                      <option value="Half Day (5-6 Jam)">Half Day (5-6 Jam)</option>
-                      <option value="1 Hari Full (12 Jam)">1 Hari Full (12 Jam)</option>
-                      <option value="Paket 2 Hari 1 Malam">Paket 2 Hari 1 Malam</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Jumlah Rombongan</label>
-                    <input
-                      type="text"
-                      name="passengers"
-                      required
-                      placeholder="Contoh: 3 Orang"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                      value={formData.passengers}
-                      onChange={handleChange}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Daftar Tempat Wisata / Rute</label>
-                  <textarea
-                    name="destinations"
-                    rows="2"
-                    required
-                    placeholder="Contoh: Sampookong, Lawang Sewu, Kota Tua"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                    value={formData.destinations}
-                    onChange={handleChange}
-                  ></textarea>
-                </div>
-              </div>
-            )}
-
-            {/* FORM JASTIP */}
-            {service === 'jastip' && (
-              <div className="space-y-3.5">
-                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">2. Detail Jastip Belanja</h3>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Rincian Barang Dibeli</label>
-                  <textarea
-                    name="itemDetails"
-                    rows="2"
-                    required
-                    placeholder="Contoh: Nasi Goreng Pak Ndut 2 porsi..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                    value={formData.itemDetails}
-                    onChange={handleChange}
-                  ></textarea>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Estimasi Budget Barang (Rp)</label>
-                    <input
-                      type="number"
-                      name="budget"
-                      required
-                      placeholder="Contoh: 50000"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                      value={formData.budget}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Lokasi Toko / Warung</label>
-                    <input
-                      type="text"
-                      name="storeLocation"
-                      required
-                      placeholder="Contoh: Pasar Bulu / Warung Pak Ndut"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                      value={formData.storeLocation}
-                      onChange={handleChange}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Alamat Antar Belanjaan</label>
-                  <input
-                    type="text"
-                    name="deliveryAddress"
-                    required
-                    placeholder="Alamat tempat barang diantar..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                    value={formData.deliveryAddress}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* FORM TUGAS & LES */}
-            {(service === 'tugas' || service === 'les') && (
-              <div className="space-y-3.5">
-                <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider">
-                  2. Detail {service === 'tugas' ? 'Tugas Akademik' : 'Les Privat'}
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Tingkat Pendidikan</label>
-                    <select
-                      name="eduLevel"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                      value={formData.eduLevel}
-                      onChange={handleChange}
-                    >
-                      <option value="SD/MI">SD / MI</option>
-                      <option value="SMP/MTs">SMP / MTs</option>
-                      <option value="SMA/SMK/MA">SMA / SMK / MA</option>
-                      <option value="Kuliah (D3/S1)">Kuliah (Diploma / S1)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Mata Pelajaran / Kuliah</label>
-                    <input
-                      type="text"
-                      name="subject"
-                      required
-                      placeholder="Contoh: Matematika / Akuntansi"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                      value={formData.subject}
-                      onChange={handleChange}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Instruksi / Detail</label>
-                  <textarea
-                    name="taskNotes"
-                    rows="2"
-                    required
-                    placeholder="Penjelasan ringkas tugas atau materi les..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none"
-                    value={formData.taskNotes}
-                    onChange={handleChange}
-                  ></textarea>
-                </div>
-              </div>
-            )}
-
-            {/* Submit WhatsApp Button */}
+            {/* SUBMIT BUTTON */}
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold py-3.5 rounded-2xl shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95"
+                disabled={service === 'antar_jemput' && !isCalculated}
+                className={`w-full font-extrabold py-3.5 rounded-2xl shadow-xl flex items-center justify-center gap-2 transition-all ${
+                  service === 'antar_jemput' && !isCalculated
+                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white active:scale-95'
+                }`}
               >
-                <Send className="w-5 h-5" /> Kirim Pesanan via WhatsApp
+                <Send className="w-5 h-5" /> 
+                {service === 'antar_jemput' && !isCalculated 
+                  ? 'Klik "Cek Tarif" Dahulu' 
+                  : 'Kirim Pesanan via WhatsApp'}
               </button>
             </div>
 
@@ -765,7 +527,7 @@ export default function App() {
         </div>
 
         <footer className="mt-8 text-center text-slate-500 text-[11px] pb-4">
-          <p>© 2026 WAKILIN. Powered by React & Vercel.</p>
+          <p>© 2026 WAKILIN. Personal Assistant & On-Demand Service.</p>
         </footer>
       </main>
 
