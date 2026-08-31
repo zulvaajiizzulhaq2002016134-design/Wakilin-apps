@@ -214,11 +214,27 @@ export default function App() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-semibold text-slate-300">Nama</label>
-                <input type="text" name="name" required placeholder="Nama Anda" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white" value={formData.name} onChange={handleChange} />
+                <input 
+                  type="text" 
+                  name="name" 
+                  required 
+                  placeholder="Nama Anda" 
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                  value={formData.name} 
+                  onChange={handleChange}
+                />
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-300">No. WA</label>
-                <input type="tel" name="phone" required placeholder="08xxx" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white" value={formData.phone} onChange={handleChange} />
+                <input 
+                  type="tel" 
+                  name="phone" 
+                  required 
+                  placeholder="08xxx" 
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                  value={formData.phone} 
+                  onChange={handleChange}
+                />
               </div>
             </div>
 
@@ -226,13 +242,32 @@ export default function App() {
             <div className="relative">
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs font-bold text-emerald-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Penjemputan</label>
-                <button type="button" onClick={() => getGpsLocation('pickup')} className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-bold">GPS Saya</button>
+                <button 
+                  type="button" 
+                  onClick={() => getGpsLocation('pickup')} 
+                  className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-bold hover:bg-emerald-500/30 transition-colors"
+                >
+                  📍 GPS
+                </button>
               </div>
-              <input type="text" required placeholder="Ketik lokasi jemput..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white" value={formData.pickupAddress} onChange={handlePickupChange} onFocus={() => setActiveMapTarget('pickup')} />
+              <input 
+                type="text" 
+                required 
+                placeholder="Ketik lokasi jemput..." 
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                value={formData.pickupAddress}
+                onChange={handlePickupChange}
+              />
               {showPickupList && pickupSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
                   {pickupSuggestions.map((item, i) => (
-                    <div key={i} onClick={() => selectSuggestion(item, 'pickup')} className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800">{item.display_name}</div>
+                    <div 
+                      key={i} 
+                      onClick={() => selectSuggestion(item, 'pickup')} 
+                      className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800 text-slate-300"
+                    >
+                      {item.display_name}
+                    </div>
                   ))}
                 </div>
               )}
@@ -242,13 +277,32 @@ export default function App() {
             <div className="relative">
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs font-bold text-rose-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Tujuan</label>
-                <button type="button" onClick={() => getGpsLocation('dest')} className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-bold">GPS Tujuan</button>
+                <button 
+                  type="button" 
+                  onClick={() => getGpsLocation('dest')} 
+                  className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded border border-rose-500/30 font-bold hover:bg-rose-500/30 transition-colors"
+                >
+                  📍 GPS
+                </button>
               </div>
-              <input type="text" required placeholder="Ketik lokasi tujuan..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white" value={formData.destAddress} onChange={handleDestChange} onFocus={() => setActiveMapTarget('dest')} />
+              <input 
+                type="text" 
+                required 
+                placeholder="Ketik lokasi tujuan..." 
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                value={formData.destAddress}
+                onChange={handleDestChange}
+              />
               {showDestList && destSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
                   {destSuggestions.map((item, i) => (
-                    <div key={i} onClick={() => selectSuggestion(item, 'dest')} className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800">{item.display_name}</div>
+                    <div 
+                      key={i} 
+                      onClick={() => selectSuggestion(item, 'dest')} 
+                      className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800 text-slate-300"
+                    >
+                      {item.display_name}
+                    </div>
                   ))}
                 </div>
               )}
@@ -257,7 +311,15 @@ export default function App() {
             {/* Waktu */}
             <div>
               <label className="text-xs font-semibold text-slate-300">Waktu Penjemputan</label>
-              <input type="text" name="datetime" required placeholder="Contoh: Sekarang / Jam 15.00" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white" value={formData.datetime} onChange={handleChange} />
+              <input 
+                type="text" 
+                name="datetime" 
+                required 
+                placeholder="Contoh: Sekarang / Jam 15.00" 
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                value={formData.datetime}
+                onChange={handleChange}
+              />
             </div>
 
             {/* TAMPILAN PETA LEAFLET INTERAKTIF */}
@@ -265,8 +327,20 @@ export default function App() {
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-400 font-semibold">Klik/Tap di peta untuk pilih titik:</span>
                 <div className="flex gap-1 text-[10px]">
-                  <button type="button" onClick={() => setActiveMapTarget('pickup')} className={`px-2 py-0.5 rounded font-bold ${activeMapTarget === 'pickup' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Titik Jemput</button>
-                  <button type="button" onClick={() => setActiveMapTarget('dest')} className={`px-2 py-0.5 rounded font-bold ${activeMapTarget === 'dest' ? 'bg-rose-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Titik Tujuan</button>
+                  <button 
+                    type="button" 
+                    onClick={() => setActiveMapTarget('pickup')} 
+                    className={`px-2 py-0.5 rounded font-bold transition-colors ${activeMapTarget === 'pickup' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                  >
+                    🟢 Jemput
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setActiveMapTarget('dest')} 
+                    className={`px-2 py-0.5 rounded font-bold transition-colors ${activeMapTarget === 'dest' ? 'bg-rose-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                  >
+                    🔴 Tujuan
+                  </button>
                 </div>
               </div>
 
@@ -286,20 +360,38 @@ export default function App() {
             </div>
 
             {/* Tombol Hitung Tarif */}
-            <button type="button" onClick={handleCekTarif} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs flex justify-center items-center gap-2">
+            <button 
+              type="button" 
+              onClick={handleCekTarif} 
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs flex justify-center items-center gap-2 transition-colors"
+            >
               <Calculator className="w-4 h-4" /> Hitung Ongkir Otomatis
             </button>
 
             {/* Box Hasil Ongkir */}
             {isCalculated && (
               <div className="bg-slate-900 border border-emerald-500/50 rounded-xl p-3 text-xs space-y-1">
-                <div className="flex justify-between text-slate-300"><span>Estimasi Jarak:</span><span className="font-bold text-white">{estimatedKm} KM</span></div>
-                <div className="flex justify-between text-sm font-extrabold text-emerald-400 pt-1 border-t border-slate-800"><span>Estimasi Ongkir:</span><span>Rp {estimatedPrice?.toLocaleString('id-ID')}</span></div>
+                <div className="flex justify-between text-slate-300">
+                  <span>Estimasi Jarak:</span>
+                  <span className="font-bold text-white">{estimatedKm} KM</span>
+                </div>
+                <div className="flex justify-between text-sm font-extrabold text-emerald-400 pt-1 border-t border-slate-800">
+                  <span>Estimasi Ongkir:</span>
+                  <span>Rp {estimatedPrice?.toLocaleString('id-ID')}</span>
+                </div>
               </div>
             )}
 
             {/* Tombol Kirim Pesanan */}
-            <button type="submit" disabled={!isCalculated} className={`w-full font-extrabold py-3.5 rounded-2xl flex justify-center items-center gap-2 text-xs ${!isCalculated ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}`}>
+            <button 
+              type="submit" 
+              disabled={!isCalculated} 
+              className={`w-full font-extrabold py-3.5 rounded-2xl flex justify-center items-center gap-2 text-xs transition-colors ${
+                !isCalculated 
+                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:from-blue-700 hover:to-blue-600'
+              }`}
+            >
               <Send className="w-4 h-4" /> {!isCalculated ? 'Hitung Ongkir Dahulu' : 'Kirim Pesanan via WhatsApp'}
             </button>
 
