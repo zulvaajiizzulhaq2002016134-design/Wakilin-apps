@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   ShoppingBag, Car, FileText, Send, Navigation, 
-  AlertTriangle, ShieldCheck, Sparkles, MapPin, Search, Calculator 
+  AlertTriangle, ShieldCheck, Sparkles, MapPin, Search, Calculator, Zap, Clock
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -28,7 +28,51 @@ function MapClickHandler({ onSelectCoords }) {
   return null;
 }
 
-const APP_PHONE_NUMBER = "6285601733814"; 
+const APP_PHONE_NUMBER = "6285601733814";
+
+// Service Configuration
+const SERVICES = {
+  jastrik: {
+    id: 'jastrik',
+    name: '🛒 JASTRIK',
+    label: 'Jasa Strip / Belanja',
+    icon: ShoppingBag,
+    color: 'from-amber-500 to-orange-500',
+    description: 'Layanan belanja dan antar barang ke rumah',
+    baseFee: 5000,
+    perKmFee: 2000
+  },
+  antar_jemput: {
+    id: 'antar_jemput',
+    name: '🚗 ANTAR-JEMPUT',
+    label: 'Antar-Jemput Orang',
+    icon: Car,
+    color: 'from-blue-500 to-cyan-500',
+    description: 'Layanan antar dan jemput orang',
+    baseFee: 0,
+    perKmFee: 1600
+  },
+  urgent: {
+    id: 'urgent',
+    name: '⚡ URGENT',
+    label: 'Jasa Urgent',
+    icon: Zap,
+    color: 'from-red-500 to-pink-500',
+    description: 'Layanan express/kilat untuk kebutuhan mendesak',
+    baseFee: 10000,
+    perKmFee: 3000
+  },
+  tugas: {
+    id: 'tugas',
+    name: '📋 TUGAS',
+    label: 'Jasa Tugas Umum',
+    icon: FileText,
+    color: 'from-purple-500 to-indigo-500',
+    description: 'Layanan tugas umum: fotostat, bayar, dll',
+    baseFee: 3000,
+    perKmFee: 1000
+  }
+};
 
 export default function App() {
   const [service, setService] = useState('antar_jemput');
@@ -57,7 +101,9 @@ export default function App() {
     itemDetails: '',
     budget: '',
     storeLocation: '',
-    deliveryAddress: ''
+    deliveryAddress: '',
+    taskDescription: '',
+    priority: 'normal'
   });
 
   const [estimatedKm, setEstimatedKm] = useState(null);
@@ -83,11 +129,21 @@ export default function App() {
 
       if (type === 'pickup') {
         setPickupCoords({ lat, lng });
-        setFormData(prev => ({ ...prev, pickupAddress: placeName }));
+        if (service === 'jastrik') {
+          setFormData(prev => ({ ...prev, storeLocation: placeName }));
+        } else if (service === 'tugas') {
+          setFormData(prev => ({ ...prev, pickupAddress: placeName }));
+        } else {
+          setFormData(prev => ({ ...prev, pickupAddress: placeName }));
+        }
         setShowPickupList(false);
       } else {
         setDestCoords({ lat, lng });
-        setFormData(prev => ({ ...prev, destAddress: placeName }));
+        if (service === 'jastrik') {
+          setFormData(prev => ({ ...prev, deliveryAddress: placeName }));
+        } else {
+          setFormData(prev => ({ ...prev, destAddress: placeName }));
+        }
         setShowDestList(false);
       }
       setIsCalculated(false);
@@ -122,7 +178,8 @@ export default function App() {
 
   const handlePickupChange = (e) => {
     const val = e.target.value;
-    setFormData(prev => ({ ...prev, pickupAddress: val }));
+    const fieldName = service === 'jastrik' ? 'storeLocation' : 'pickupAddress';
+    setFormData(prev => ({ ...prev, [fieldName]: val }));
     setIsCalculated(false);
     setFormError('');
     fetchAddressSuggestions(val, 'pickup');
@@ -130,7 +187,8 @@ export default function App() {
 
   const handleDestChange = (e) => {
     const val = e.target.value;
-    setFormData(prev => ({ ...prev, destAddress: val }));
+    const fieldName = service === 'jastrik' ? 'deliveryAddress' : 'destAddress';
+    setFormData(prev => ({ ...prev, [fieldName]: val }));
     setIsCalculated(false);
     setFormError('');
     fetchAddressSuggestions(val, 'dest');
@@ -141,11 +199,13 @@ export default function App() {
     const lng = parseFloat(item.lon);
     if (type === 'pickup') {
       setPickupCoords({ lat, lng });
-      setFormData(prev => ({ ...prev, pickupAddress: item.display_name }));
+      const fieldName = service === 'jastrik' ? 'storeLocation' : 'pickupAddress';
+      setFormData(prev => ({ ...prev, [fieldName]: item.display_name }));
       setShowPickupList(false);
     } else {
       setDestCoords({ lat, lng });
-      setFormData(prev => ({ ...prev, destAddress: item.display_name }));
+      const fieldName = service === 'jastrik' ? 'deliveryAddress' : 'destAddress';
+      setFormData(prev => ({ ...prev, [fieldName]: item.display_name }));
       setShowDestList(false);
     }
     setFormError('');
@@ -167,11 +227,15 @@ export default function App() {
 
   // Perhitungan Tarif Berdasarkan Koordinat
   const handleCekTarif = () => {
+    const pickupAddr = service === 'jastrik' ? formData.storeLocation : formData.pickupAddress;
+    const destAddr = service === 'jastrik' ? formData.deliveryAddress : formData.destAddress;
+
     if (!pickupCoords || !destCoords) {
-      setFormError("Silakan tentukan lokasi Penjemputan dan Tujuan terlebih dahulu!");
+      setFormError("Silakan tentukan lokasi awal dan tujuan terlebih dahulu!");
       return;
     }
 
+    const serviceConfig = SERVICES[service];
     const R = 6371; 
     const dLat = (destCoords.lat - pickupCoords.lat) * Math.PI / 180;
     const dLon = (destCoords.lng - pickupCoords.lng) * Math.PI / 180;
@@ -182,7 +246,12 @@ export default function App() {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     const distance = parseFloat((R * c * 1.3).toFixed(1)) || 1.0;
 
-    let totalHarga = distance <= 1 ? 2000 : Math.ceil(distance / 5) * 8000;
+    let totalHarga = serviceConfig.baseFee + Math.ceil(distance) * serviceConfig.perKmFee;
+
+    // Tambahan untuk urgent
+    if (service === 'urgent' && formData.priority === 'high') {
+      totalHarga += 5000;
+    }
 
     setEstimatedKm(distance);
     setEstimatedPrice(totalHarga);
@@ -199,23 +268,65 @@ export default function App() {
       setFormError("No. WhatsApp harus diisi!");
       return false;
     }
-    if (!pickupCoords) {
-      setFormError("Pilih lokasi Penjemputan!");
-      return false;
+    
+    if (service === 'jastrik') {
+      if (!formData.storeLocation || !formData.storeLocation.trim()) {
+        setFormError("Lokasi toko harus diisi!");
+        return false;
+      }
+      if (!formData.deliveryAddress || !formData.deliveryAddress.trim()) {
+        setFormError("Alamat pengiriman harus diisi!");
+        return false;
+      }
+      if (!formData.itemDetails || !formData.itemDetails.trim()) {
+        setFormError("Detail barang harus diisi!");
+        return false;
+      }
+    } else if (service === 'tugas') {
+      if (!formData.pickupAddress || !formData.pickupAddress.trim()) {
+        setFormError("Lokasi tugas harus diisi!");
+        return false;
+      }
+      if (!formData.taskDescription || !formData.taskDescription.trim()) {
+        setFormError("Deskripsi tugas harus diisi!");
+        return false;
+      }
+    } else {
+      if (!pickupCoords) {
+        setFormError("Pilih lokasi penjemputan!");
+        return false;
+      }
+      if (!destCoords) {
+        setFormError("Pilih lokasi tujuan!");
+        return false;
+      }
     }
-    if (!destCoords) {
-      setFormError("Pilih lokasi Tujuan!");
-      return false;
-    }
+
     if (!formData.datetime || !formData.datetime.trim()) {
-      setFormError("Waktu penjemputan harus diisi!");
+      setFormError("Waktu harus diisi!");
       return false;
     }
     if (!isCalculated) {
-      setFormError("Hitung ongkir terlebih dahulu!");
+      setFormError("Hitung tarif terlebih dahulu!");
       return false;
     }
     return true;
+  };
+
+  const getPickupLabel = () => {
+    switch(service) {
+      case 'jastrik': return 'Lokasi Toko';
+      case 'tugas': return 'Lokasi Tugas';
+      default: return 'Lokasi Penjemputan';
+    }
+  };
+
+  const getDestLabel = () => {
+    switch(service) {
+      case 'jastrik': return 'Alamat Pengiriman';
+      case 'tugas': return 'Lokasi Tugas';
+      default: return 'Lokasi Tujuan';
+    }
   };
 
   const handleSubmit = (e) => {
@@ -225,21 +336,44 @@ export default function App() {
       return;
     }
 
+    const serviceConfig = SERVICES[service];
     const mapsBase = "https://www.google.com/maps?q=";
-    const pickupMaps = pickupCoords ? `${mapsBase}${pickupCoords.lat},${pickupCoords.lng}` : formData.pickupAddress;
-    const destMaps = destCoords ? `${mapsBase}${destCoords.lat},${destCoords.lng}` : formData.destAddress;
+    const pickupAddr = service === 'jastrik' ? formData.storeLocation : formData.pickupAddress;
+    const destAddr = service === 'jastrik' ? formData.deliveryAddress : formData.destAddress;
+    const pickupMaps = pickupCoords ? `${mapsBase}${pickupCoords.lat},${pickupCoords.lng}` : pickupAddr;
+    const destMaps = destCoords ? `${mapsBase}${destCoords.lat},${destCoords.lng}` : destAddr;
 
-    const message = `🛵 *ORDER ANTAR - JEMPUT - WAKILIN*\n\n` +
-      `👤 *Nama:* ${formData.name}\n` +
-      `📞 *No. WA:* ${formData.phone}\n` +
-      `⏰ *Waktu:* ${formData.datetime}\n\n` +
-      `📍 *JEMPUT:* ${formData.pickupAddress}\n🔗 ${pickupMaps}\n\n` +
-      `🏁 *TUJUAN:* ${formData.destAddress}\n🔗 ${destMaps}\n\n` +
-      `📏 *Jarak:* ${estimatedKm} KM\n` +
-      `💰 *Ongkir:* Rp ${estimatedPrice?.toLocaleString('id-ID')}`;
+    let message = `${serviceConfig.name} *ORDER - WAKILIN*\n\n`;
+    message += `👤 *Nama:* ${formData.name}\n`;
+    message += `📞 *No. WA:* ${formData.phone}\n`;
+    message += `⏰ *Waktu:* ${formData.datetime}\n\n`;
+
+    if (service === 'jastrik') {
+      message += `🏪 *Lokasi Toko:* ${pickupAddr}\n🔗 ${pickupMaps}\n\n`;
+      message += `🏠 *Alamat Pengiriman:* ${destAddr}\n🔗 ${destMaps}\n\n`;
+      message += `📦 *Detail Barang:* ${formData.itemDetails}\n`;
+      if (formData.budget) message += `💰 *Budget:* Rp ${formData.budget}\n`;
+    } else if (service === 'tugas') {
+      message += `📍 *Lokasi Tugas:* ${formData.pickupAddress}\n🔗 ${pickupMaps}\n\n`;
+      message += `📝 *Deskripsi Tugas:* ${formData.taskDescription}\n`;
+      message += `⚡ *Priority:* ${formData.priority === 'high' ? 'TINGGI' : 'NORMAL'}\n`;
+    } else if (service === 'urgent') {
+      message += `📍 *Awal:* ${pickupAddr}\n🔗 ${pickupMaps}\n\n`;
+      message += `🏁 *Tujuan:* ${destAddr}\n🔗 ${destMaps}\n\n`;
+      message += `⚡ *Priority:* ${formData.priority === 'high' ? 'SANGAT URGENT' : 'URGENT'}\n`;
+      if (formData.urgentNotes) message += `📌 *Catatan:* ${formData.urgentNotes}\n`;
+    } else {
+      message += `📍 *Penjemputan:* ${pickupAddr}\n🔗 ${pickupMaps}\n\n`;
+      message += `🏁 *Tujuan:* ${destAddr}\n🔗 ${destMaps}\n\n`;
+    }
+
+    message += `📏 *Jarak:* ${estimatedKm} KM\n`;
+    message += `💰 *Tarif:* Rp ${estimatedPrice?.toLocaleString('id-ID')}\n`;
 
     window.open(`https://wa.me/${APP_PHONE_NUMBER}?text=${encodeURIComponent(message)}`, '_blank');
   };
+
+  const currentService = SERVICES[service];
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans pb-16">
@@ -254,6 +388,50 @@ export default function App() {
       </header>
 
       <main className="max-w-xl mx-auto px-4 pt-4">
+        {/* SERVICE DASHBOARD */}
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {Object.values(SERVICES).map((svc) => (
+            <button
+              key={svc.id}
+              onClick={() => {
+                setService(svc.id);
+                setPickupCoords(null);
+                setDestCoords(null);
+                setIsCalculated(false);
+                setFormError('');
+                setFormData({
+                  name: '',
+                  phone: '',
+                  pickupAddress: '',
+                  destAddress: '',
+                  datetime: '',
+                  urgentNotes: '',
+                  itemDetails: '',
+                  budget: '',
+                  storeLocation: '',
+                  deliveryAddress: '',
+                  taskDescription: '',
+                  priority: 'normal'
+                });
+              }}
+              className={`p-3 rounded-2xl border-2 transition-all font-bold text-sm flex flex-col items-center gap-1 ${
+                service === svc.id
+                  ? `border-${svc.id === 'jastrik' ? 'amber' : svc.id === 'urgent' ? 'red' : svc.id === 'tugas' ? 'purple' : 'blue'}-500 bg-gradient-to-br ${svc.color} text-white shadow-lg`
+                  : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              <span className="text-xl">{svc.name.split(' ')[0]}</span>
+              <span className="text-xs">{svc.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* SERVICE INFO */}
+        <div className={`mb-4 p-3 rounded-2xl bg-gradient-to-r ${currentService.color} text-white text-xs border border-white/20`}>
+          <p className="font-bold mb-1">{currentService.name}</p>
+          <p>{currentService.description}</p>
+        </div>
+
         <div className="bg-slate-800 rounded-3xl p-5 border border-slate-700 shadow-xl space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             
@@ -293,156 +471,480 @@ export default function App() {
               </div>
             </div>
 
-            {/* Input Lokasi Penjemputan */}
-            <div className="relative">
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-bold text-emerald-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Penjemputan</label>
-                <button 
-                  type="button" 
-                  onClick={() => getGpsLocation('pickup')} 
-                  className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-bold hover:bg-emerald-500/30 transition-colors"
-                  aria-label="Ambil lokasi GPS penjemputan"
-                >
-                  📍 Jemput
-                </button>
-              </div>
-              <input 
-                type="text" 
-                required 
-                placeholder="Ketik lokasi jemput..." 
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
-                value={formData.pickupAddress}
-                onChange={handlePickupChange}
-                onFocus={() => setActiveMapTarget('pickup')}
-              />
-              {showPickupList && pickupSuggestions.length > 0 && (
-                <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
-                  {pickupSuggestions.map((item, i) => (
-                    <div 
-                      key={i} 
-                      onClick={() => selectSuggestion(item, 'pickup')} 
-                      className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
-                      role="button"
-                      tabIndex={0}
+            {/* JASTRIK SPECIFIC FIELDS */}
+            {service === 'jastrik' && (
+              <>
+                {/* Lokasi Toko */}
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-amber-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Toko</label>
+                    <button 
+                      type="button" 
+                      onClick={() => getGpsLocation('pickup')} 
+                      className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30 font-bold hover:bg-amber-500/30 transition-colors"
+                      aria-label="Ambil lokasi GPS toko"
                     >
-                      {item.display_name}
+                      📍 GPS
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Ketik lokasi toko..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500" 
+                    value={formData.storeLocation}
+                    onChange={handlePickupChange}
+                    onFocus={() => setActiveMapTarget('pickup')}
+                  />
+                  {showPickupList && pickupSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                      {pickupSuggestions.map((item, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => selectSuggestion(item, 'pickup')} 
+                          className="p-2 text-xs hover:bg-amber-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {item.display_name}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Input Lokasi Tujuan */}
-            <div className="relative">
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-bold text-rose-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Tujuan</label>
-                <button 
-                  type="button" 
-                  onClick={() => getGpsLocation('dest')} 
-                  className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded border border-rose-500/30 font-bold hover:bg-rose-500/30 transition-colors"
-                  aria-label="Ambil lokasi GPS tujuan"
-                >
-                  📍 Tujuan
-                </button>
-              </div>
-              <input 
-                type="text" 
-                required 
-                placeholder="Ketik lokasi tujuan..." 
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
-                value={formData.destAddress}
-                onChange={handleDestChange}
-                onFocus={() => setActiveMapTarget('dest')}
-              />
-              {showDestList && destSuggestions.length > 0 && (
-                <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
-                  {destSuggestions.map((item, i) => (
-                    <div 
-                      key={i} 
-                      onClick={() => selectSuggestion(item, 'dest')} 
-                      className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
-                      role="button"
-                      tabIndex={0}
+                {/* Alamat Pengiriman */}
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-amber-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Alamat Pengiriman</label>
+                    <button 
+                      type="button" 
+                      onClick={() => getGpsLocation('dest')} 
+                      className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30 font-bold hover:bg-amber-500/30 transition-colors"
+                      aria-label="Ambil lokasi GPS pengiriman"
                     >
-                      {item.display_name}
+                      📍 GPS
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Ketik alamat pengiriman..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500" 
+                    value={formData.deliveryAddress}
+                    onChange={handleDestChange}
+                    onFocus={() => setActiveMapTarget('dest')}
+                  />
+                  {showDestList && destSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                      {destSuggestions.map((item, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => selectSuggestion(item, 'dest')} 
+                          className="p-2 text-xs hover:bg-amber-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {item.display_name}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Waktu */}
+                {/* Detail Barang */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300">📦 Detail Barang yang Dibeli</label>
+                  <textarea 
+                    name="itemDetails" 
+                    placeholder="Misal: 2 kg beras, 1 liter minyak, 5 telur..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-none h-20"
+                    value={formData.itemDetails}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                {/* Budget */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300">💰 Budget (Optional)</label>
+                  <input 
+                    type="text" 
+                    name="budget" 
+                    placeholder="Rp 50.000 (jika ada budget tertentu)" 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    value={formData.budget}
+                    onChange={handleChange}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* TUGAS SPECIFIC FIELDS */}
+            {service === 'tugas' && (
+              <>
+                {/* Lokasi Tugas */}
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-purple-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Tugas</label>
+                    <button 
+                      type="button" 
+                      onClick={() => getGpsLocation('pickup')} 
+                      className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30 font-bold hover:bg-purple-500/30 transition-colors"
+                      aria-label="Ambil lokasi GPS tugas"
+                    >
+                      📍 GPS
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Ketik lokasi tugas (kantor, toko, rumah, dll)..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" 
+                    value={formData.pickupAddress}
+                    onChange={handlePickupChange}
+                    onFocus={() => setActiveMapTarget('pickup')}
+                  />
+                  {showPickupList && pickupSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                      {pickupSuggestions.map((item, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => selectSuggestion(item, 'pickup')} 
+                          className="p-2 text-xs hover:bg-purple-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {item.display_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Deskripsi Tugas */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300">📝 Deskripsi Tugas</label>
+                  <textarea 
+                    name="taskDescription" 
+                    placeholder="Misal: Fotokopi 20 lembar, bayar tagihan listrik Rp 100.000, belanja kebutuhan kantor..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 resize-none h-20"
+                    value={formData.taskDescription}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300">⚡ Prioritas</label>
+                  <select 
+                    name="priority" 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                    value={formData.priority}
+                    onChange={handleChange}
+                  >
+                    <option value="normal">Normal (Sesuai jadwal reguler)</option>
+                    <option value="high">Tinggi (Dikerjakan lebih cepat)</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* ANTAR-JEMPUT SPECIFIC FIELDS */}
+            {service === 'antar_jemput' && (
+              <>
+                {/* Input Lokasi Penjemputan */}
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-cyan-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Penjemputan</label>
+                    <button 
+                      type="button" 
+                      onClick={() => getGpsLocation('pickup')} 
+                      className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 font-bold hover:bg-cyan-500/30 transition-colors"
+                      aria-label="Ambil lokasi GPS penjemputan"
+                    >
+                      📍 GPS
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Ketik lokasi jemput..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" 
+                    value={formData.pickupAddress}
+                    onChange={handlePickupChange}
+                    onFocus={() => setActiveMapTarget('pickup')}
+                  />
+                  {showPickupList && pickupSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                      {pickupSuggestions.map((item, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => selectSuggestion(item, 'pickup')} 
+                          className="p-2 text-xs hover:bg-cyan-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {item.display_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Input Lokasi Tujuan */}
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-cyan-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Tujuan</label>
+                    <button 
+                      type="button" 
+                      onClick={() => getGpsLocation('dest')} 
+                      className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 font-bold hover:bg-cyan-500/30 transition-colors"
+                      aria-label="Ambil lokasi GPS tujuan"
+                    >
+                      📍 GPS
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Ketik lokasi tujuan..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" 
+                    value={formData.destAddress}
+                    onChange={handleDestChange}
+                    onFocus={() => setActiveMapTarget('dest')}
+                  />
+                  {showDestList && destSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                      {destSuggestions.map((item, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => selectSuggestion(item, 'dest')} 
+                          className="p-2 text-xs hover:bg-cyan-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {item.display_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* URGENT SPECIFIC FIELDS */}
+            {service === 'urgent' && (
+              <>
+                {/* Input Lokasi Awal */}
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-red-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Awal</label>
+                    <button 
+                      type="button" 
+                      onClick={() => getGpsLocation('pickup')} 
+                      className="text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded border border-red-500/30 font-bold hover:bg-red-500/30 transition-colors"
+                      aria-label="Ambil lokasi GPS awal"
+                    >
+                      📍 GPS
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Ketik lokasi awal..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500" 
+                    value={formData.pickupAddress}
+                    onChange={handlePickupChange}
+                    onFocus={() => setActiveMapTarget('pickup')}
+                  />
+                  {showPickupList && pickupSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                      {pickupSuggestions.map((item, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => selectSuggestion(item, 'pickup')} 
+                          className="p-2 text-xs hover:bg-red-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {item.display_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Input Lokasi Tujuan */}
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-red-400 flex items-center gap-1"><MapPin className="w-4 h-4" /> Lokasi Tujuan</label>
+                    <button 
+                      type="button" 
+                      onClick={() => getGpsLocation('dest')} 
+                      className="text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded border border-red-500/30 font-bold hover:bg-red-500/30 transition-colors"
+                      aria-label="Ambil lokasi GPS tujuan"
+                    >
+                      📍 GPS
+                    </button>
+                  </div>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Ketik lokasi tujuan..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500" 
+                    value={formData.destAddress}
+                    onChange={handleDestChange}
+                    onFocus={() => setActiveMapTarget('dest')}
+                  />
+                  {showDestList && destSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                      {destSuggestions.map((item, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => selectSuggestion(item, 'dest')} 
+                          className="p-2 text-xs hover:bg-red-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {item.display_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300">⚡ Tingkat Urgency</label>
+                  <select 
+                    name="priority" 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                    value={formData.priority}
+                    onChange={handleChange}
+                  >
+                    <option value="normal">Urgent (Tarif normal+)</option>
+                    <option value="high">Sangat Urgent (Tarif premium +Rp5.000)</option>
+                  </select>
+                </div>
+
+                {/* Urgent Notes */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300">📌 Catatan Penting</label>
+                  <textarea 
+                    name="urgentNotes" 
+                    placeholder="Misal: Barang fragile, perlu hati-hati, jangan dibuka, dll..." 
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 resize-none h-16"
+                    value={formData.urgentNotes}
+                    onChange={handleChange}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Waktu (untuk semua layanan) */}
             <div>
-              <label className="text-xs font-semibold text-slate-300">Waktu Penjemputan</label>
+              <label className="text-xs font-semibold text-slate-300">⏰ Waktu</label>
               <input 
                 type="text" 
                 name="datetime" 
                 required 
-                placeholder="Contoh: Sekarang / Jam 15.00" 
+                placeholder="Contoh: Sekarang / Jam 15.00 / Besok jam 10.00" 
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
                 value={formData.datetime}
                 onChange={handleChange}
               />
             </div>
 
-            {/* TAMPILAN PETA LEAFLET INTERAKTIF */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] text-slate-400 font-semibold">Klik/Tap di peta untuk pilih titik:</span>
-                <div className="flex gap-1 text-[10px]">
-                  <button 
-                    type="button" 
-                    onClick={() => setActiveMapTarget('pickup')} 
-                    className={`px-2 py-0.5 rounded font-bold transition-colors ${activeMapTarget === 'pickup' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
-                    aria-label="Pilih titik penjemputan di peta"
-                  >
-                    🟢 Jemput
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => setActiveMapTarget('dest')} 
-                    className={`px-2 py-0.5 rounded font-bold transition-colors ${activeMapTarget === 'dest' ? 'bg-rose-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
-                    aria-label="Pilih titik tujuan di peta"
-                  >
-                    🔴 Tujuan
-                  </button>
+            {/* TAMPILAN PETA LEAFLET INTERAKTIF (untuk layanan yang memerlukan lokasi) */}
+            {(service === 'antar_jemput' || service === 'urgent' || service === 'jastrik') && (
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] text-slate-400 font-semibold">Klik/Tap di peta untuk pilih titik:</span>
+                  <div className="flex gap-1 text-[10px]">
+                    <button 
+                      type="button" 
+                      onClick={() => setActiveMapTarget('pickup')} 
+                      className={`px-2 py-0.5 rounded font-bold transition-colors ${
+                        activeMapTarget === 'pickup' 
+                          ? `bg-gradient-to-r ${
+                              service === 'jastrik' ? 'from-amber-500 to-orange-500' : 
+                              service === 'urgent' ? 'from-red-500 to-pink-500' : 
+                              'from-cyan-500 to-blue-500'
+                            } text-white` 
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                      aria-label="Pilih titik awal di peta"
+                    >
+                      {service === 'jastrik' ? '🏪' : service === 'urgent' ? '📍' : '🟢'} {service === 'jastrik' ? 'Toko' : 'Awal'}
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setActiveMapTarget('dest')} 
+                      className={`px-2 py-0.5 rounded font-bold transition-colors ${
+                        activeMapTarget === 'dest' 
+                          ? `bg-gradient-to-r ${
+                              service === 'jastrik' ? 'from-amber-500 to-orange-500' : 
+                              service === 'urgent' ? 'from-red-500 to-pink-500' : 
+                              'from-rose-500 to-pink-500'
+                            } text-white` 
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                      aria-label="Pilih titik tujuan di peta"
+                    >
+                      {service === 'jastrik' ? '🏠' : '🔴'} {service === 'jastrik' ? 'Kirim' : 'Tujuan'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-56 w-full rounded-2xl overflow-hidden border border-slate-700 relative">
+                  <MapContainer center={[-6.9932, 110.4203]} zoom={12} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+                    
+                    {/* Pin Lokasi */}
+                    {pickupCoords && <Marker position={[pickupCoords.lat, pickupCoords.lng]} />}
+                    {destCoords && <Marker position={[destCoords.lat, destCoords.lng]} />}
+
+                    <MapClickHandler onSelectCoords={(lat, lng) => fetchAddressFromCoords(lat, lng, activeMapTarget)} />
+                  </MapContainer>
                 </div>
               </div>
-
-              <div className="h-56 w-full rounded-2xl overflow-hidden border border-slate-700 relative">
-                <MapContainer center={[-6.9932, 110.4203]} zoom={12} style={{ height: '100%', width: '100%' }}>
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
-                  
-                  {/* Pin Lokasi Penjemputan */}
-                  {pickupCoords && <Marker position={[pickupCoords.lat, pickupCoords.lng]} />}
-                  
-                  {/* Pin Lokasi Tujuan */}
-                  {destCoords && <Marker position={[destCoords.lat, destCoords.lng]} />}
-
-                  <MapClickHandler onSelectCoords={(lat, lng) => fetchAddressFromCoords(lat, lng, activeMapTarget)} />
-                </MapContainer>
-              </div>
-            </div>
+            )}
 
             {/* Tombol Hitung Tarif */}
             <button 
               type="button" 
               onClick={handleCekTarif} 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs flex justify-center items-center gap-2 transition-colors"
-              aria-label="Hitung ongkir berdasarkan lokasi"
+              className={`w-full font-bold py-2.5 rounded-xl text-xs flex justify-center items-center gap-2 transition-colors text-white ${
+                service === 'jastrik' ? 'bg-amber-600 hover:bg-amber-700' :
+                service === 'urgent' ? 'bg-red-600 hover:bg-red-700' :
+                service === 'tugas' ? 'bg-purple-600 hover:bg-purple-700' :
+                'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
-              <Calculator className="w-4 h-4" /> Hitung Ongkir Otomatis
+              <Calculator className="w-4 h-4" /> Hitung Tarif
             </button>
 
-            {/* Box Hasil Ongkir */}
+            {/* Box Hasil Tarif */}
             {isCalculated && (
-              <div className="bg-slate-900 border border-emerald-500/50 rounded-xl p-3 text-xs space-y-1">
+              <div className={`border rounded-xl p-3 text-xs space-y-1 ${
+                service === 'jastrik' ? 'bg-amber-900/30 border-amber-500/50' :
+                service === 'urgent' ? 'bg-red-900/30 border-red-500/50' :
+                service === 'tugas' ? 'bg-purple-900/30 border-purple-500/50' :
+                'bg-slate-900 border-cyan-500/50'
+              }`}>
                 <div className="flex justify-between text-slate-300">
                   <span>Estimasi Jarak:</span>
                   <span className="font-bold text-white">{estimatedKm} KM</span>
                 </div>
-                <div className="flex justify-between text-sm font-extrabold text-emerald-400 pt-1 border-t border-slate-800">
-                  <span>Estimasi Ongkir:</span>
+                <div className={`flex justify-between text-sm font-extrabold pt-1 border-t ${
+                  service === 'jastrik' ? 'text-amber-400 border-amber-800' :
+                  service === 'urgent' ? 'text-red-400 border-red-800' :
+                  service === 'tugas' ? 'text-purple-400 border-purple-800' :
+                  'text-cyan-400 border-slate-800'
+                }`}>
+                  <span>Estimasi Tarif:</span>
                   <span>Rp {estimatedPrice?.toLocaleString('id-ID')}</span>
                 </div>
               </div>
@@ -455,11 +957,16 @@ export default function App() {
               className={`w-full font-extrabold py-3.5 rounded-2xl flex justify-center items-center gap-2 text-xs transition-colors ${
                 !isCalculated 
                   ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:from-blue-700 hover:to-blue-600'
+                  : `bg-gradient-to-r ${
+                      service === 'jastrik' ? 'from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600' :
+                      service === 'urgent' ? 'from-red-600 to-red-500 hover:from-red-700 hover:to-red-600' :
+                      service === 'tugas' ? 'from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600' :
+                      'from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600'
+                    } text-white`
               }`}
-              aria-label={!isCalculated ? 'Hitung ongkir dahulu sebelum kirim pesanan' : 'Kirim pesanan melalui WhatsApp'}
+              aria-label={!isCalculated ? 'Hitung tarif dahulu sebelum kirim pesanan' : 'Kirim pesanan melalui WhatsApp'}
             >
-              <Send className="w-4 h-4" /> {!isCalculated ? 'Hitung Ongkir Dahulu' : 'Kirim Pesanan via WhatsApp'}
+              <Send className="w-4 h-4" /> {!isCalculated ? 'Hitung Tarif Dahulu' : `Kirim ${currentService.label} via WhatsApp`}
             </button>
 
           </form>
