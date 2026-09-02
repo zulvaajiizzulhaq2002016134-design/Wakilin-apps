@@ -63,10 +63,12 @@ export default function App() {
   const [estimatedKm, setEstimatedKm] = useState(null);
   const [estimatedPrice, setEstimatedPrice] = useState(null);
   const [isCalculated, setIsCalculated] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setIsCalculated(false);
+    setFormError('');
   };
 
   // Konversi Koordinat dari Klik Peta menjadi Nama Alamat
@@ -82,13 +84,17 @@ export default function App() {
       if (type === 'pickup') {
         setPickupCoords({ lat, lng });
         setFormData(prev => ({ ...prev, pickupAddress: placeName }));
+        setShowPickupList(false);
       } else {
         setDestCoords({ lat, lng });
         setFormData(prev => ({ ...prev, destAddress: placeName }));
+        setShowDestList(false);
       }
       setIsCalculated(false);
+      setFormError('');
     } catch (err) {
       console.error("Gagal mendapatkan nama lokasi:", err);
+      setFormError("Gagal mengambil nama lokasi. Coba lagi.");
     }
   };
 
@@ -110,6 +116,7 @@ export default function App() {
       }
     } catch (err) {
       console.error("Gagal mengambil saran lokasi:", err);
+      setFormError("Gagal mengambil rekomendasi lokasi.");
     }
   };
 
@@ -117,6 +124,7 @@ export default function App() {
     const val = e.target.value;
     setFormData(prev => ({ ...prev, pickupAddress: val }));
     setIsCalculated(false);
+    setFormError('');
     fetchAddressSuggestions(val, 'pickup');
   };
 
@@ -124,6 +132,7 @@ export default function App() {
     const val = e.target.value;
     setFormData(prev => ({ ...prev, destAddress: val }));
     setIsCalculated(false);
+    setFormError('');
     fetchAddressSuggestions(val, 'dest');
   };
 
@@ -139,23 +148,27 @@ export default function App() {
       setFormData(prev => ({ ...prev, destAddress: item.display_name }));
       setShowDestList(false);
     }
+    setFormError('');
   };
 
   // Lacak Lokasi GPS HP
   const getGpsLocation = (type) => {
-    if (!navigator.geolocation) return alert("Browser HP Anda tidak mendukung akses GPS.");
+    if (!navigator.geolocation) {
+      setFormError("Browser HP Anda tidak mendukung akses GPS.");
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         fetchAddressFromCoords(pos.coords.latitude, pos.coords.longitude, type);
       },
-      () => alert("Gagal mengambil posisi GPS. Pastikan Izin Lokasi/GPS di HP Anda sudah aktif.")
+      () => setFormError("Gagal mengambil posisi GPS. Pastikan Izin Lokasi di HP Anda sudah aktif.")
     );
   };
 
   // Perhitungan Tarif Berdasarkan Koordinat
   const handleCekTarif = () => {
     if (!pickupCoords || !destCoords) {
-      alert("Silakan tentukan lokasi Penjemputan dan Tujuan melalui ketikan alamat atau tap di peta terlebih dahulu!");
+      setFormError("Silakan tentukan lokasi Penjemputan dan Tujuan terlebih dahulu!");
       return;
     }
 
@@ -174,10 +187,44 @@ export default function App() {
     setEstimatedKm(distance);
     setEstimatedPrice(totalHarga);
     setIsCalculated(true);
+    setFormError('');
+  };
+
+  const validateForm = () => {
+    if (!formData.name || !formData.name.trim()) {
+      setFormError("Nama harus diisi!");
+      return false;
+    }
+    if (!formData.phone || !formData.phone.trim()) {
+      setFormError("No. WhatsApp harus diisi!");
+      return false;
+    }
+    if (!pickupCoords) {
+      setFormError("Pilih lokasi Penjemputan!");
+      return false;
+    }
+    if (!destCoords) {
+      setFormError("Pilih lokasi Tujuan!");
+      return false;
+    }
+    if (!formData.datetime || !formData.datetime.trim()) {
+      setFormError("Waktu penjemputan harus diisi!");
+      return false;
+    }
+    if (!isCalculated) {
+      setFormError("Hitung ongkir terlebih dahulu!");
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+
     const mapsBase = "https://www.google.com/maps?q=";
     const pickupMaps = pickupCoords ? `${mapsBase}${pickupCoords.lat},${pickupCoords.lng}` : formData.pickupAddress;
     const destMaps = destCoords ? `${mapsBase}${destCoords.lat},${destCoords.lng}` : formData.destAddress;
@@ -209,6 +256,14 @@ export default function App() {
       <main className="max-w-xl mx-auto px-4 pt-4">
         <div className="bg-slate-800 rounded-3xl p-5 border border-slate-700 shadow-xl space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
+            
+            {/* Error Alert */}
+            {formError && (
+              <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-xs text-red-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
             
             {/* Input Nama & WA */}
             <div className="grid grid-cols-2 gap-3">
@@ -246,8 +301,9 @@ export default function App() {
                   type="button" 
                   onClick={() => getGpsLocation('pickup')} 
                   className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-bold hover:bg-emerald-500/30 transition-colors"
+                  aria-label="Ambil lokasi GPS penjemputan"
                 >
-                  📍 GPS
+                  📍 Jemput
                 </button>
               </div>
               <input 
@@ -257,6 +313,7 @@ export default function App() {
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
                 value={formData.pickupAddress}
                 onChange={handlePickupChange}
+                onFocus={() => setActiveMapTarget('pickup')}
               />
               {showPickupList && pickupSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
@@ -264,7 +321,9 @@ export default function App() {
                     <div 
                       key={i} 
                       onClick={() => selectSuggestion(item, 'pickup')} 
-                      className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800 text-slate-300"
+                      className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                      role="button"
+                      tabIndex={0}
                     >
                       {item.display_name}
                     </div>
@@ -281,8 +340,9 @@ export default function App() {
                   type="button" 
                   onClick={() => getGpsLocation('dest')} 
                   className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded border border-rose-500/30 font-bold hover:bg-rose-500/30 transition-colors"
+                  aria-label="Ambil lokasi GPS tujuan"
                 >
-                  📍 GPS
+                  📍 Tujuan
                 </button>
               </div>
               <input 
@@ -292,6 +352,7 @@ export default function App() {
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
                 value={formData.destAddress}
                 onChange={handleDestChange}
+                onFocus={() => setActiveMapTarget('dest')}
               />
               {showDestList && destSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full bg-slate-900 border border-slate-700 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
@@ -299,7 +360,9 @@ export default function App() {
                     <div 
                       key={i} 
                       onClick={() => selectSuggestion(item, 'dest')} 
-                      className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800 text-slate-300"
+                      className="p-2 text-xs hover:bg-blue-600/30 cursor-pointer border-b border-slate-800 text-slate-300 transition-colors"
+                      role="button"
+                      tabIndex={0}
                     >
                       {item.display_name}
                     </div>
@@ -331,6 +394,7 @@ export default function App() {
                     type="button" 
                     onClick={() => setActiveMapTarget('pickup')} 
                     className={`px-2 py-0.5 rounded font-bold transition-colors ${activeMapTarget === 'pickup' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                    aria-label="Pilih titik penjemputan di peta"
                   >
                     🟢 Jemput
                   </button>
@@ -338,6 +402,7 @@ export default function App() {
                     type="button" 
                     onClick={() => setActiveMapTarget('dest')} 
                     className={`px-2 py-0.5 rounded font-bold transition-colors ${activeMapTarget === 'dest' ? 'bg-rose-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                    aria-label="Pilih titik tujuan di peta"
                   >
                     🔴 Tujuan
                   </button>
@@ -364,6 +429,7 @@ export default function App() {
               type="button" 
               onClick={handleCekTarif} 
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs flex justify-center items-center gap-2 transition-colors"
+              aria-label="Hitung ongkir berdasarkan lokasi"
             >
               <Calculator className="w-4 h-4" /> Hitung Ongkir Otomatis
             </button>
@@ -391,6 +457,7 @@ export default function App() {
                   ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
                   : 'bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:from-blue-700 hover:to-blue-600'
               }`}
+              aria-label={!isCalculated ? 'Hitung ongkir dahulu sebelum kirim pesanan' : 'Kirim pesanan melalui WhatsApp'}
             >
               <Send className="w-4 h-4" /> {!isCalculated ? 'Hitung Ongkir Dahulu' : 'Kirim Pesanan via WhatsApp'}
             </button>
